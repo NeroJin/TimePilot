@@ -11,7 +11,7 @@ PowerPC 机器码静态重编译成 x64 原生程序，让原版代码直接在�
 | 路径 | 说明 |
 |---|---|
 | `src/` | 手写代码：入口、GPU 钩子、移植补丁（`hooks.cpp` / `fixes.cpp` / `main.cpp`） |
-| `generated/` | 重编译产出的 C++（151 个文件）。**必须入库**——没有原始 XEX 谁也无法重新生成 |
+| `generated/` | 重编译产出的 C++（约 150 个文件）。**不入库**——这是从游戏机器码反编译出的游戏专有代码（版权），且需你自备原始 `default.xex` 才能用 SDK 重新生成；克隆后执行 `cmake --build build --config Release --target TimePilot_codegen` 在本地生成 |
 | `TimePilot_manifest.toml` | codegen 配置：入口点、函数表、素材根目录 |
 | `PORTING_NOTES.md` | 移植全过程记录：函数补桩、图形与输入层的实测结论、构建环境坑 |
 | `game/` | 指向解包素材的目录联接（不入库，见 `.gitignore`） |
@@ -43,6 +43,7 @@ mklink /J game <解包出来的素材目录>
 
 `build/Release/` 下需要：`TimePilot.exe`、`rexruntime.dll`、`rexgpu-xenos.dll`、
 `game/`（素材联接）、`TimePilot.toml`（首次运行自动生成）。
+其中 `rexruntime.dll` / `rexgpu-xenos.dll` 是 ReXGlue SDK 运行时，**未随本仓库分发**，需自行从 SDK 取得（再分发许可请向 ReXGlueX 确认）。
 
 画质与键位设置用配套启动器 [TimePilot.Loader](https://github.com/NeroJin/TimePilot.Loader)：
 它按选项写 `TimePilot.toml` 再拉起游戏，也可以解包 STFS 包、录制键盘映射。

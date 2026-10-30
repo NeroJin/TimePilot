@@ -54,7 +54,7 @@ TimePilot/
     default/                   TimePilot_recomp.NN.cpp、*_funcs.h、*_init.h …
   build/Release/               exe + toml + dll + logs/
   game -> D:/ReverseTools/ReXGlueSDK/TimePilot   （素材 junction，不入库）
-  .gitignore                   构建产物/素材/运行配置全部排除；generated/ 必须入库
+  .gitignore                   构建产物/素材/运行配置全部排除；generated/ 同样不入库（含游戏专有 recomp 代码，版权）
 ```
 
 > 目录迁移后 `TimePilot_manifest.toml` 的 `game_root` / `file_path` 已从 `../timepilot`
