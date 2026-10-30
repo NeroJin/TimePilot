@@ -1,0 +1,38 @@
+# ---- CMake / VS 构建产物 ----
+/build/
+/out/
+CMakeUserPresets.json
+.vs/
+
+# 编译中间产物（万一落到源码目录）
+*.obj
+*.pch
+*.ipch
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.idb
+
+# ---- 运行时产物 ----
+# build/Release 是运行目录，已被 /build/ 覆盖；这几条是防止复制出来单独用时漏网
+/release/
+/logs/
+*.log
+
+# ---- 运行配置：含 license_mask 等本机设置，不入库（另给模板）----
+TimePilot.toml
+
+# ---- 游戏素材：绝不入库（版权 + 体积）----
+game/
+/TimePilot/
+*.xex
+*.xpr
+*.bik
+*.wmv
+*.xma
+
+# 注意：generated/ 不入库。
+# 重编译生成的 C++ 含游戏专有 recomp 代码（版权），且需用户自备原始 XEX 才能本地 recomp 生成，
+# 故不纳入版本库；克隆后需自行 recomp 或放置本地生成产物。
+/generated/
