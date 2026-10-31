@@ -15,6 +15,7 @@ PowerPC 机器码静态重编译成 x64 原生程序，让原版代码直接在�
 | `TimePilot_manifest.toml` | codegen 配置：入口点、函数表、素材根目录 |
 | `PORTING_NOTES.md` | 移植全过程记录：函数补桩、图形与输入层的实测结论、构建环境坑 |
 | `game/` | 指向解包素材的目录联接（不入库，见 `.gitignore`） |
+| `Loader/` | 解包/启动工具源码（C#）：`TimePilotLoader` + `TimePilotUnpack`，已并入主仓库（原 `TimePilot.Loader` 仓库已归档） |
 
 ## 构建
 
@@ -43,9 +44,9 @@ mklink /J game <解包出来的素材目录>
 
 `build/Release/` 下需要：`TimePilot.exe`、`rexruntime.dll`、`rexgpu-xenos.dll`、
 `game/`（素材联接）、`TimePilot.toml`（首次运行自动生成）。
-其中 `rexruntime.dll` / `rexgpu-xenos.dll` 是 ReXGlue SDK 运行时，**未随本仓库分发**，需自行从 SDK 取得（再分发许可请向 ReXGlueX 确认）。
+其中 `rexruntime.dll` / `rexgpu-xenos.dll` 是 ReXGlue SDK 运行时（**BSD-3 许可，可随包再分发**，已包含在 Release 中）。
 
-画质与键位设置用配套启动器 [TimePilot.Loader](https://github.com/NeroJin/TimePilot.Loader)：
+画质与键位设置用本仓库自带的启动器（`Loader/` 目录下的 `TimePilotLoader.exe`）：
 它按选项写 `TimePilot.toml` 再拉起游戏，也可以解包 STFS 包、录制键盘映射。
 
 ## 已实测的运行时行为

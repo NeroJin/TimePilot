@@ -36,3 +36,6 @@ game/
 # 重编译生成的 C++ 含游戏专有 recomp 代码（版权），且需用户自备原始 XEX 才能本地 recomp 生成，
 # 故不纳入版本库；克隆后需自行 recomp 或放置本地生成产物。
 /generated/
+
+# 本地发布包（重编译 exe + SDK 运行时 dll + Loader），纯本地产物，不入库。
+/dist/
