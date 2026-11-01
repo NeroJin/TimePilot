@@ -145,6 +145,24 @@ namespace TimePilot.Loader
             }
         }
 
+        /// <summary>
+        /// 把被注释掉的键恢复成活动行，保留它注释里的值（不重写新值）。
+        /// 键本来就活动或不存在时什么都不做。用于"窗口模式注释了 resolution，
+        /// 切回全屏时要把它恢复"这类来回切换的场景。
+        /// </summary>
+        public void Uncomment(string key)
+        {
+            for (int i = 0; i < _lines.Count; i++)
+            {
+                Match m = CommentedLine.Match(_lines[i]);
+                if (m.Success && string.Equals(m.Groups["key"].Value, key, StringComparison.Ordinal))
+                {
+                    _lines[i] = m.Groups["lead"].Value + key + " = " + m.Groups["val"].Value;
+                    return;
+                }
+            }
+        }
+
         public void SetString(string key, string value)
         {
             Set(key, "\"" + Escape(value) + "\"");
@@ -268,18 +286,20 @@ namespace TimePilot.Loader
             "# 必须写成十进制，写成 0xFFFFFFFF 解析会失败。",
             "license_mask = 4294967295",
             "",
-            "# 输出分辨率预设（决定窗口大小，默认 720p）。勾选「窗口大小随渲染分辨率」时",
-            "# 启动器会注释掉这一行（预设优先级高于 window_width/height），其余情况不碰它。",
+            "# 输出分辨率预设（决定全屏时的目标分辨率，默认 720p）。窗口模式下启动器会",
+            "# 注释掉这一行，改用 window_width/height（预设优先级高于 window_width/height，",
+            "# 见 ReXGlue video_mode_util::ResolveConfiguredSize）。",
             "resolution = \"720p\"",
             "",
             "# 全屏（无边框 + 桌面分辨率）。启动器里的「全屏」勾选框写的就是这一行。",
             "fullscreen = false",
             "",
-            "# 内部渲染倍率：1 = 原生 1280x720，2/3/4 = 整数倍超采样",
+            "# 内部渲染倍率：固定 1 = 原生 1280x720。改大内部渲染率会让游戏出现半像素偏移，",
+            "# 所以启动器每次保存都强制写 1，界面上不再提供倍率选项。",
             "resolution_scale = 1",
             "",
-            "# 后期抗锯齿：none / fxaa / fxaa_extreme",
-            "# 像素画推荐 none：FXAA 会把硬边糊掉，锯齿交给 resolution_scale 的超采样解决。",
+            "# 后期抗锯齿：none / fxaa / fxaa_extreme。",
+            "# 本作是像素画，FXAA 会把硬边糊掉，默认关闭，可按需自行开启。",
             "present_effect = \"none\"",
             "",
             "# 键盘操作：把键盘模拟成一个 Xbox 手柄，固定喂给 1P，可以和实体手柄同时用。",

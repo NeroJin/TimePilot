@@ -236,25 +236,16 @@ TimePilot\
 | 启动检查 | `TimePilot.exe` / `rexruntime.dll` / `rexgpu-xenos.dll` 任一缺失 → 弹框列名字后退出（不写任何文件） |
 | toml 缺失 | 按模板生成：`gpu_plugin` / `license_mask` / `resolution` / `resolution_scale` / `present_effect` / `mnk_mode` / `mnk_mouse` / `vsync` / VRR |
 | 解包 | 点按钮弹文件对话框选包，loader 同目录里能找到包时会**预选好**（直接回车即可）；已解包会二次确认；`Staging` 失败不破坏旧目录 |
-| 改设置 | 每次选择变更立刻写回 toml；只改自己的键（倍率/抗锯齿/全屏/vsync/VRR/mnk_*），其它键与注释原样保留 |
+| 改设置 | 每次选择变更立刻写回 toml；只改自己的键（窗口尺寸/抗锯齿/全屏/vsync/VRR/mnk_*），其它键与注释原样保留 |
 | 键盘映射 | 对话框内逐项改 `keybind_*`，改动即时写盘；主窗体的保存不会碰这些键 |
 | 启动游戏 | 写 toml → `Process.Start`（工作目录 = loader 目录）→ 启动器关闭 |
 | 解包目标 | `<loader 目录>\game`，正好对上游戏的三级路径查找 |
 
 ## 关于画质选项
 
-- **分辨率**：下拉 4 挡，显示"渲染尺寸 + 标注"：`1280x720  原生` / `2560x1440  2x 超采样` / `3840x2160  3x 超采样` / `5120x2880  4x 超采样`，写 `resolution_scale`（int32_t，做不出 1.5x，所以没有 1080p 挡）。
-- **窗口大小随渲染分辨率**（仅窗口模式可勾）：
-
-  | 状态 | toml 效果 |
-  |---|---|
-  | 不勾（默认） | `window_width/height` 被注释，窗口尺寸交给 `resolution` 预设 / 运行时默认（720p）；渲染 Nx 再缩回窗口 = 超采样 |
-  | 勾上 | `resolution` 预设被注释（它的优先级高于 window_*），写 `window_width/height = 渲染尺寸`，画面 **1:1 像素映射**，整数倍缩放最锐利 |
-  | 全屏勾上 | 本勾禁用置灰（全屏走桌面分辨率），窗口键原样保留；退回窗口模式自动恢复 |
-
-  渲染尺寸超过桌面分辨率时（3x/4x 在 1080p/1440p 屏上）本勾强制禁用并取消勾选，避免写出比屏幕还大的窗口。启动器每次变更都会同步这三个键的状态；游戏内按 F4 改的 `resolution` 预设在不勾"随渲染分辨率"时会一直保留。
-- **抗锯齿**：`present_effect` = `none` / `fxaa` / `fxaa_extreme`，最终呈现阶段的后处理。界面默认「关闭（推荐）」，并在下方常驻一行灰字提示：FXAA 会抹掉像素硬边，锯齿交给上面的超采样处理。
-- **全屏**：`fullscreen`（无边框 + 桌面分辨率，`fullscreen_exclusive` 保持默认关闭）。
+- **窗口尺寸**（仅窗口模式可用，全屏时置灰）：下拉 4 挡 `1280×720` / `1920×1080` / `2560×1440` / `3840×2160`，写入 `window_width` / `window_height`。内部渲染分辨率固定为原生 **720p**（`resolution_scale = 1`，界面不再提供倍率选项——改大内部渲染率会让游戏出现半像素偏移）。其中 1280×720 / 2560×1440 / 3840×2160 是 720p 的整数倍（整数缩放、无半像素偏移）；1920×1080 是 1.5 倍，可能引入非整数缩放，按需选用。
+- **抗锯齿**：`present_effect` = `none` / `fxaa` / `fxaa_extreme`，最终呈现阶段的后处理。默认「关闭」，可按需自行开启——FXAA 会把像素硬边糊掉，本作是像素画一般建议关。
+- **全屏**：`fullscreen`（无边框 + 桌面分辨率，`fullscreen_exclusive` 保持默认关闭）。勾选后窗口尺寸下拉置灰，不写 `window_*`。
 - **VRR / vsync**：**界面不提供开关，启动器每次强制写** `d3d12_allow_variable_refresh_rate_and_tearing = false` + `vsync = true`。原因：允许撕裂会让呈现用 0 同步间隔，游戏速度直接失控（跑得飞快）。
 
   > 实测提醒：当前这版运行时（`rexruntime.dll` + `rexgpu-xenos.dll`）**没有注册 `vsync` 这个 cvar**——两个模块的字符串表里只有相邻的 `resolution_scale` / `present_effect` / `d3d12_allow_variable_refresh_rate_and_tearing`，`vsync` 只在 `graphics/flags.h` 里被声明、没被编译进去。D3D12 呈现路径只有"允许撕裂"打开时才用 0 同步间隔，所以**真正决定速度的是撕裂那个键，它已经被强制关掉了**。`vsync` 键照样写进 toml（运行时对不认识的键静默忽略），将来运行时补上这个 cvar 就自动生效。

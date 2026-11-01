@@ -25,18 +25,18 @@ namespace TimePilot.Loader
         private const string ManagedAaIgnored = "none";
 
         /// <summary>
-        /// 分辨率下拉的候选：内部渲染尺寸 = 720p 视频模式 × 整数倍。
-        /// resolution_scale 是 int32_t，做不出 1.5x，所以只有整数倍。
-        /// 窗口模式下可再勾「窗口大小随渲染分辨率」：窗口 = 渲染尺寸时画面 1:1
-        /// 呈现（整数倍缩放，像素硬边无损）；不勾则 720p 窗口，渲染大了再缩回
-        /// 来，相当于超采样。两条路都是整数倍缩放，不会糊。
+        /// 窗口尺寸预设（仅窗口模式生效，写入 window_width/height）。
+        /// 内部渲染分辨率固定为原生 720p（resolution_scale = 1），所以这里只是
+        /// 决定窗口的客户区像素大小：选得越大，720p 画面被 GPU 放大得越多。
+        /// 其中 1280×720 / 2560×1440 / 3840×2160 是 720p 的整数倍（整数缩放、无半
+        /// 像素偏移）；1920×1080 是 1.5 倍，可能引入非整数缩放，按需选用。
         /// </summary>
-        private static readonly ScaleOption[] ScaleOptions =
+        private static readonly WindowSizeOption[] WindowSizeOptions =
         {
-            new ScaleOption(1, 1280,  720),
-            new ScaleOption(2, 2560, 1440),
-            new ScaleOption(3, 3840, 2160),
-            new ScaleOption(4, 5120, 2880),
+            new WindowSizeOption(1280,  720),
+            new WindowSizeOption(1920, 1080),
+            new WindowSizeOption(2560, 1440),
+            new WindowSizeOption(3840, 2160),
         };
 
         /// <summary>抗锯齿 cvar present_effect 的取值。</summary>
@@ -51,11 +51,10 @@ namespace TimePilot.Loader
         /// <summary>布局根容器。窗体高度要按它的实际需求校准，否则加了新分组就会挤掉按钮行。</summary>
         private TableLayoutPanel _root;
 
-        private ComboBox _scaleCombo;
         private ComboBox _aaCombo;
         private CheckBox _fullscreenCheck;
-        /// <summary>仅窗口模式可用：勾上后窗口客户区 = 渲染尺寸（1:1 像素映射）。</summary>
-        private CheckBox _matchWindowCheck;
+        /// <summary>窗口尺寸预设下拉：仅窗口模式可用，写入 window_width/height。</summary>
+        private ComboBox _windowSizeCombo;
         /// <summary>mnk_mode：键盘是否模拟成 1P 手柄。关掉后键盘完全不参与游戏。</summary>
         private CheckBox _keyboardCheck;
         private Label _dataStatus;
@@ -171,32 +170,17 @@ namespace TimePilot.Loader
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
-                RowCount = 4
+                RowCount = 3
             };
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60F));
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 3; i++)
             {
                 grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             }
 
-            // 分辨率
-            grid.Controls.Add(MakeLabel("LabelScale"), 0, 0);
-            _scaleCombo = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(3, 3, 0, 3)
-            };
-            foreach (ScaleOption option in ScaleOptions)
-            {
-                _scaleCombo.Items.Add(option);
-            }
-            _scaleCombo.SelectedIndexChanged += OnScaleChanged;
-            grid.Controls.Add(_scaleCombo, 1, 0);
-
             // 抗锯齿
-            grid.Controls.Add(MakeLabel("LabelAa"), 0, 1);
+            grid.Controls.Add(MakeLabel("LabelAa"), 0, 0);
             _aaCombo = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -208,19 +192,7 @@ namespace TimePilot.Loader
                 _aaCombo.Items.Add(new AaOption(AaValues[i], L10n.Get(AaKeys[i])));
             }
             _aaCombo.SelectedIndexChanged += OnSettingChanged;
-            grid.Controls.Add(_aaCombo, 1, 1);
-
-            // 抗锯齿的建议：像素画被后处理抹一遍会丢掉硬边，锯齿交给上面的超采样解决。
-            var aaHint = new Label
-            {
-                Text = L10n.Get("HintAa"),
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(0, 0, 0, 4)
-            };
-            grid.Controls.Add(aaHint, 0, 2);
-            grid.SetColumnSpan(aaHint, 2);
+            grid.Controls.Add(_aaCombo, 1, 0);
 
             // 全屏（无边框 + 桌面分辨率；fullscreen_exclusive 保持默认关闭）
             _fullscreenCheck = new CheckBox
@@ -230,17 +202,24 @@ namespace TimePilot.Loader
                 Margin = new Padding(0, 6, 0, 0)
             };
             _fullscreenCheck.CheckedChanged += OnSettingChanged;
-            grid.Controls.Add(_fullscreenCheck, 0, 3);
+            grid.Controls.Add(_fullscreenCheck, 0, 1);
+            grid.SetColumnSpan(_fullscreenCheck, 2);
 
-            // 窗口 = 渲染分辨率。只在窗口模式且渲染尺寸不超过桌面时可选。
-            _matchWindowCheck = new CheckBox
+            // 窗口尺寸预设（仅窗口模式可用，全屏时禁用）。写入 window_width/height；
+            // SaveSettings 会注释掉 resolution 预设，使 window_* 优先生效。
+            grid.Controls.Add(MakeLabel("LabelWindowSize"), 0, 2);
+            _windowSizeCombo = new ComboBox
             {
-                Text = L10n.Get("MatchWindow"),
-                AutoSize = true,
-                Margin = new Padding(0, 6, 0, 0)
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Dock = DockStyle.Fill,
+                Margin = new Padding(3, 3, 0, 3)
             };
-            _matchWindowCheck.CheckedChanged += OnSettingChanged;
-            grid.Controls.Add(_matchWindowCheck, 1, 3);
+            foreach (WindowSizeOption option in WindowSizeOptions)
+            {
+                _windowSizeCombo.Items.Add(option);
+            }
+            _windowSizeCombo.SelectedIndexChanged += OnSettingChanged;
+            grid.Controls.Add(_windowSizeCombo, 1, 2);
 
             group.Controls.Add(grid);
             return group;
@@ -439,69 +418,38 @@ namespace TimePilot.Loader
             _suspendSave = true;
             try
             {
-                int scale = _toml.GetInt("resolution_scale", 1);
-                _scaleCombo.SelectedIndex = ScaleIndexFor(scale);
                 _aaCombo.SelectedIndex = AaIndexOf(_toml.GetString("present_effect", ManagedAaIgnored));
                 bool fullscreen = _toml.GetBool("fullscreen", false);
                 _fullscreenCheck.Checked = fullscreen;
                 // 缺这个键时按"开"处理：老 toml 里没有 mnk_mode，而以前启动器
                 // 每次保存都会强写 true，所以缺省视为开才不会把人的键盘"弄没了"。
                 _keyboardCheck.Checked = _toml.GetBool("mnk_mode", true);
-                // 上次的窗口策略从文件反推：window_width 活动行 = 窗口随渲染分辨率。
-                _matchWindowCheck.Checked = !fullscreen
-                    && _toml.HasActive("window_width")
-                    && _toml.HasActive("window_height");
+                // 窗口尺寸：非全屏且 toml 里有活动的 window_width/height 时，按值匹配
+                // 下拉项；否则（含全屏）用默认首项 1280×720。
+                int w = _toml.GetInt("window_width", 0);
+                int h = _toml.GetInt("window_height", 0);
+                _windowSizeCombo.SelectedIndex = WindowSizeIndexFor(w, h);
             }
             finally
             {
                 _suspendSave = false;
             }
-            UpdateMatchEnabled();
+            UpdateWindowSizeEnabled();
         }
 
         private void OnSettingChanged(object sender, EventArgs e)
         {
             if (_suspendSave || _busy) return;
-            UpdateMatchEnabled();
-            SaveSettings(false);
-        }
-
-        /// <summary>分辨率下拉：换挡后「窗口随渲染分辨率」的可用性会变（3x/4x 可能超桌面）。</summary>
-        private void OnScaleChanged(object sender, EventArgs e)
-        {
-            if (_suspendSave || _busy) return;
-            UpdateMatchEnabled();
+            UpdateWindowSizeEnabled();
             SaveSettings(false);
         }
 
         /// <summary>
-        /// 「窗口大小随渲染分辨率」的可用性：全屏时没意义（禁用但保留勾选状态，
-        /// 退回窗口模式自动恢复）；渲染尺寸超过桌面时强制取消勾选——
-        /// 否则写出的窗口比屏幕还大，标题栏按钮点不到。
+        /// 窗口尺寸下拉的可用性：仅在窗口模式可用；全屏时禁用（窗口尺寸无意义）。
         /// </summary>
-        private void UpdateMatchEnabled()
+        private void UpdateWindowSizeEnabled()
         {
-            bool fits = FitsDesktop(SelectedOption);
-            _matchWindowCheck.Enabled = !_busy && !_fullscreenCheck.Checked && fits;
-            if (!fits && _matchWindowCheck.Checked)
-            {
-                _suspendSave = true;
-                try
-                {
-                    _matchWindowCheck.Checked = false;
-                }
-                finally
-                {
-                    _suspendSave = false;
-                }
-            }
-        }
-
-        private static bool FitsDesktop(ScaleOption option)
-        {
-            var screen = Screen.PrimaryScreen;
-            if (screen == null) return true;
-            return option.Width <= screen.Bounds.Width && option.Height <= screen.Bounds.Height;
+            _windowSizeCombo.Enabled = !_busy && !_fullscreenCheck.Checked;
         }
 
         /// <summary>把当前界面值写进 toml。silent=true 时不弹错误框（启动流程里自己处理）。</summary>
@@ -513,31 +461,30 @@ namespace TimePilot.Loader
                 _toml.SetString("gpu_plugin", "xenos");
             }
 
-            ScaleOption option = SelectedOption;
-
-            _toml.SetInt("resolution_scale", option.Scale);
+            // 内部渲染分辨率固定为原生 720p（resolution_scale = 1）：游戏改了内部
+            // 渲染率会出现半像素偏移，所以这里不给用户改，直接写死。
+            _toml.SetInt("resolution_scale", 1);
             _toml.SetString("present_effect", SelectedAa);
             _toml.SetBool("fullscreen", _fullscreenCheck.Checked);
 
-            // 窗口策略：三条路互斥，靠注释/解注释 window_* 和 resolution 切换。
+            // 窗口策略：resolution 预设优先级高于 window_width/height（见 ReXGlue
+            // video_mode_util::ResolveConfiguredSize），所以两边互斥靠注释切换。
             if (_fullscreenCheck.Checked)
             {
-                // 全屏走桌面分辨率，窗口尺寸键原样保留，不替用户做主。
-            }
-            else if (_matchWindowCheck.Checked)
-            {
-                // 窗口 = 渲染分辨率：1:1 像素映射，整数倍缩放最锐利。
-                // resolution 预设的优先级高于 window_*，必须注释掉才轮得到下面两行。
-                _toml.CommentOut("resolution");
-                _toml.SetInt("window_width", option.Width);
-                _toml.SetInt("window_height", option.Height);
+                // 全屏：恢复 resolution 预设（窗口阶段可能已把它注释掉），沿用原全屏
+                // 行为按预设分辨率渲染；窗口尺寸键只在窗口模式有意义，这里注释掉。
+                // 用 Uncomment 而不是 Set，是为保留用户若在 toml 里手改过的分辨率值。
+                _toml.Uncomment("resolution");
+                _toml.CommentOut("window_width");
+                _toml.CommentOut("window_height");
             }
             else
             {
-                // 固定 720p 窗口超采样：注释掉 window_*，窗口尺寸交给
-                // resolution 预设（或运行时默认），F4 改过的预设不受影响。
-                _toml.CommentOut("window_width");
-                _toml.CommentOut("window_height");
+                // 窗口：注释掉 resolution 预设，使 window_width/height 优先生效。
+                _toml.CommentOut("resolution");
+                WindowSizeOption size = SelectedWindowSize;
+                _toml.SetInt("window_width", size.Width);
+                _toml.SetInt("window_height", size.Height);
             }
 
             // 强制项，不给界面开关：
@@ -569,12 +516,12 @@ namespace TimePilot.Loader
             }
         }
 
-        private ScaleOption SelectedOption
+        private WindowSizeOption SelectedWindowSize
         {
             get
             {
-                var option = _scaleCombo.SelectedItem as ScaleOption;
-                return option ?? ScaleOptions[0];
+                var option = _windowSizeCombo.SelectedItem as WindowSizeOption;
+                return option ?? WindowSizeOptions[0];
             }
         }
 
@@ -587,12 +534,14 @@ namespace TimePilot.Loader
             }
         }
 
-        /// <summary>把 toml 里的 resolution_scale 映射到下拉项；越界往最近的一挡收。</summary>
-        private static int ScaleIndexFor(int scale)
+        /// <summary>把 toml 里的 window 尺寸匹配到下拉项；不匹配时用默认首项 1280×720。</summary>
+        private static int WindowSizeIndexFor(int w, int h)
         {
-            if (scale <= 1) return 0;
-            if (scale >= ScaleOptions.Length) return ScaleOptions.Length - 1;
-            return scale - 1;
+            for (int i = 0; i < WindowSizeOptions.Length; i++)
+            {
+                if (WindowSizeOptions[i].Width == w && WindowSizeOptions[i].Height == h) return i;
+            }
+            return 0;
         }
 
         private static int AaIndexOf(string value)
@@ -731,11 +680,10 @@ namespace TimePilot.Loader
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            _scaleCombo.Enabled = !busy;
             _aaCombo.Enabled = !busy;
             _fullscreenCheck.Enabled = !busy;
             _keyboardCheck.Enabled = !busy;
-            UpdateMatchEnabled();   // 匹配勾还要看全屏状态和桌面尺寸，单独算
+            UpdateWindowSizeEnabled();   // 窗口尺寸下拉还要看全屏状态，单独算
             _extractButton.Enabled = !busy;
             _keyMapButton.Enabled = !busy;
             _launchButton.Enabled = !busy;
@@ -812,25 +760,21 @@ namespace TimePilot.Loader
 
         // ================================================================ 选项类型
 
-        /// <summary>下拉框里的一项，显示成 "2560x1440  2x 超采样"（1x 显示"原生"）。</summary>
-        private sealed class ScaleOption
+        /// <summary>窗口尺寸预设项，显示成 "1280×720" 这样的客户区像素尺寸。</summary>
+        private sealed class WindowSizeOption
         {
-            public readonly int Scale;
             public readonly int Width;
             public readonly int Height;
 
-            public ScaleOption(int scale, int width, int height)
+            public WindowSizeOption(int width, int height)
             {
-                Scale = scale;
                 Width = width;
                 Height = height;
             }
 
             public override string ToString()
             {
-                string size = string.Format(CultureInfo.InvariantCulture, "{0}x{1}", Width, Height);
-                string suffix = Scale == 1 ? L10n.Get("ScaleNative") : L10n.Format("ScaleSuper", Scale);
-                return size + "  " + suffix;
+                return string.Format(CultureInfo.InvariantCulture, "{0}×{1}", Width, Height);
             }
         }
 
